@@ -434,7 +434,7 @@ export default function CurrentPOSPage() {
           </div>
 
           {/* Beverage Grid */}
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary-gold scrollbar-track-dark-charcoal">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary-gold scrollbar-track-dark-charcoal">
             {filteredBeverages.length === 0 ? (
               <p className="col-span-full text-cream-white text-center py-8">
                 No beverages found for this category or event.

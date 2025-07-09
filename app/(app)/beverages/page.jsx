@@ -10,7 +10,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import toast from 'react-hot-toast';
 import Modal from '../../../components/Modal';
 import Link from 'next/link';
-import Image from 'next/image'; // Import Image component
+// Removed 'Image' import to use standard <img> tag
+// import Image from 'next/image';
 
 export default function BeveragesPage() {
   const { user } = useAuth();
@@ -153,7 +154,7 @@ export default function BeveragesPage() {
           <button
             onClick={() => {
               if (!activeEvent) {
-                toast.error('Please create or select an active event first to add beverages.');
+                toast.error('Please select or create an active event first to add beverages.');
                 return;
               }
               setIsModalOpen(true);
@@ -179,13 +180,11 @@ export default function BeveragesPage() {
                 beverages.map((beverage) => (
                   <div key={beverage.id} className="bg-deep-navy p-4 rounded-lg shadow-md border border-dark-charcoal hover:border-secondary-gold transform hover:scale-[1.02] transition-transform duration-200">
                     {beverage.imageUrl && (
-                      <div className="w-full h-32 relative mb-3"> {/* Added wrapper div for Image fill */}
-                        <Image
+                      <div className="w-full h-32 relative mb-3"> {/* Kept relative container for consistent sizing */}
+                        <img // Changed to <img> tag
                           src={beverage.imageUrl}
                           alt={beverage.name}
-                          fill // Use fill to make image cover the div
-                          className="object-cover rounded-md border border-dark-charcoal"
-                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Example sizes prop
+                          className="object-cover rounded-md border border-dark-charcoal w-full h-full" // Added w-full h-full
                         />
                       </div>
                     )}
@@ -300,8 +299,8 @@ export default function BeveragesPage() {
                 onChange={handleImageChange}
               />
               {imagePreview && (
-                <div className="mt-4 relative w-32 h-32"> {/* Added relative container for Image fill */}
-                  <Image src={imagePreview} alt="Image Preview" fill className="object-cover rounded-md border border-dark-charcoal" />
+                <div className="mt-4 relative w-32 h-32"> {/* Added relative container for image preview */}
+                  <img src={imagePreview} alt="Image Preview" className="object-cover rounded-md border border-dark-charcoal w-full h-full" /> {/* Changed to <img> and added w-full h-full */}
                 </div>
               )}
             </div>
