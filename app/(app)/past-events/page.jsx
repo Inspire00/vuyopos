@@ -1,7 +1,7 @@
 // app/(app)/past-events/page.jsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Import useCallback
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../lib/firebase';
@@ -14,13 +14,8 @@ export default function PastEventsPage() {
   const [pastEvents, setPastEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      fetchPastEvents();
-    }
-  }, [user]);
-
-  const fetchPastEvents = async () => {
+  // Wrap fetchPastEvents in useCallback
+  const fetchPastEvents = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -49,7 +44,13 @@ export default function PastEventsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]); // Add user to useCallback dependencies
+
+  useEffect(() => {
+    if (user) {
+      fetchPastEvents();
+    }
+  }, [user, fetchPastEvents]); // Include fetchPastEvents in useEffect dependencies
 
   if (loading) {
     return (
@@ -67,7 +68,7 @@ export default function PastEventsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pastEvents.length === 0 ? (
             <p className="text-cream-white col-span-full text-center">
-              No past events found. Events become "past" when you set another event as current.
+              No past events found. Events become &quot;past&quot; when you set another event as current. {/* Fixed unescaped quotes */}
             </p>
           ) : (
             pastEvents.map((event) => (

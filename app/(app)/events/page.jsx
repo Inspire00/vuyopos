@@ -1,13 +1,14 @@
 // app/(app)/events/page.jsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import MainLayout from '../../../components/MainLayout'; // Path change: relative path
-import { useAuth } from '../../../context/AuthContext'; // Path change: relative path
-import { db } from '../../../lib/firebase'; // Path change: relative path
+import { useState, useEffect, useCallback } from 'react'; // Import useCallback
+import MainLayout from '../../../components/MainLayout';
+import { useAuth } from '../../../context/AuthContext';
+import { db } from '../../../lib/firebase';
 import { collection, addDoc, getDocs, query, where, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import Modal from '../../../components/Modal'; // Path change: relative path
+import Modal from '../../../components/Modal';
+import Link from 'next/link';
 
 export default function EventsPage() {
   const { user } = useAuth();
@@ -19,13 +20,8 @@ export default function EventsPage() {
   const [newEventLocation, setNewEventLocation] = useState('');
   const [newEventBudget, setNewEventBudget] = useState(0);
 
-  useEffect(() => {
-    if (user) {
-      fetchEvents();
-    }
-  }, [user]);
-
-  const fetchEvents = async () => {
+  // Wrap fetchEvents in useCallback
+  const fetchEvents = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -42,7 +38,13 @@ export default function EventsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]); // Add user to useCallback dependencies
+
+  useEffect(() => {
+    if (user) {
+      fetchEvents();
+    }
+  }, [user, fetchEvents]); // Include fetchEvents in useEffect dependencies
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();

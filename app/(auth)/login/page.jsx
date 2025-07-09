@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '../../../context/AuthContext'; // Path change: relative path
+import { useAuth } from '../../../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
@@ -89,7 +89,7 @@ export default function LoginPage() {
             </p>
           ) : (
             <p>
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '} {/* Fixed unescaped apostrophe */}
               <button
                 onClick={() => setIsRegistering(true)}
                 className="text-secondary-gold hover:underline focus:outline-none"

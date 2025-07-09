@@ -1,15 +1,16 @@
 // app/(app)/beverages/page.jsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import MainLayout from '../../../components/MainLayout'; // Path change: relative path
-import { useAuth } from '../../../context/AuthContext'; // Path change: relative path
-import { db, storage } from '../../../lib/firebase'; // Path change: relative path
+import { useState, useEffect, useMemo, useCallback } from 'react'; // Import useCallback
+import MainLayout from '../../../components/MainLayout';
+import { useAuth } from '../../../context/AuthContext';
+import { db, storage } from '../../../lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import toast from 'react-hot-toast';
-import Modal from '../../../components/Modal'; // Path change: relative path
+import Modal from '../../../components/Modal';
 import Link from 'next/link';
+import Image from 'next/image'; // Import Image component
 
 export default function BeveragesPage() {
   const { user } = useAuth();
@@ -30,14 +31,8 @@ export default function BeveragesPage() {
     'alcoholic': ['Red Wine', 'White Wine', 'Beers', 'Ciders', 'Strong Drink', 'Other Alcoholic'],
   }), []);
 
-
-  useEffect(() => {
-    if (user) {
-      fetchActiveEventAndBeverages();
-    }
-  }, [user]);
-
-  const fetchActiveEventAndBeverages = async () => {
+  // Wrap fetchActiveEventAndBeverages in useCallback
+  const fetchActiveEventAndBeverages = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -66,7 +61,13 @@ export default function BeveragesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]); // Add user to useCallback dependencies
+
+  useEffect(() => {
+    if (user) {
+      fetchActiveEventAndBeverages();
+    }
+  }, [user, fetchActiveEventAndBeverages]); // Include fetchActiveEventAndBeverages in useEffect dependencies
 
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -178,11 +179,15 @@ export default function BeveragesPage() {
                 beverages.map((beverage) => (
                   <div key={beverage.id} className="bg-deep-navy p-4 rounded-lg shadow-md border border-dark-charcoal hover:border-secondary-gold transform hover:scale-[1.02] transition-transform duration-200">
                     {beverage.imageUrl && (
-                      <img
-                        src={beverage.imageUrl}
-                        alt={beverage.name}
-                        className="w-full h-32 object-cover rounded-md mb-3 border border-dark-charcoal"
-                      />
+                      <div className="w-full h-32 relative mb-3"> {/* Added wrapper div for Image fill */}
+                        <Image
+                          src={beverage.imageUrl}
+                          alt={beverage.name}
+                          fill // Use fill to make image cover the div
+                          className="object-cover rounded-md border border-dark-charcoal"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Example sizes prop
+                        />
+                      </div>
                     )}
                     <h3 className="text-xl font-semibold text-cream-white truncate mb-1">{beverage.name}</h3>
                     <p className="text-sm text-primary-gold mb-2">{beverage.category} ({beverage.type})</p>
@@ -295,8 +300,8 @@ export default function BeveragesPage() {
                 onChange={handleImageChange}
               />
               {imagePreview && (
-                <div className="mt-4">
-                  <img src={imagePreview} alt="Image Preview" className="max-w-xs h-32 object-cover rounded-md border border-dark-charcoal" />
+                <div className="mt-4 relative w-32 h-32"> {/* Added relative container for Image fill */}
+                  <Image src={imagePreview} alt="Image Preview" fill className="object-cover rounded-md border border-dark-charcoal" />
                 </div>
               )}
             </div>

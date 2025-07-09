@@ -1,7 +1,7 @@
 // app/(app)/past-events/[eventId]/page.jsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react'; // Import useCallback
 import MainLayout from '../../../../components/MainLayout';
 import { useAuth } from '../../../../context/AuthContext';
 import { db } from '../../../../lib/firebase';
@@ -23,17 +23,8 @@ export default function PastEventDetailsPage() {
   const [error, setError] = useState(null);
   const [auditedStocks, setAuditedStocks] = useState({}); // New state for audited stock
 
-  useEffect(() => {
-    if (!user) {
-      router.push('/login'); // Redirect to login if not authenticated
-      return;
-    }
-    if (eventId) {
-      fetchEventData();
-    }
-  }, [user, eventId, router]);
-
-  const fetchEventData = async () => {
+  // Wrap fetchEventData in useCallback
+  const fetchEventData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -96,7 +87,17 @@ export default function PastEventDetailsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, eventId]); // Add user and eventId to useCallback dependencies
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/login'); // Redirect to login if not authenticated
+      return;
+    }
+    if (eventId) {
+      fetchEventData();
+    }
+  }, [user, eventId, router, fetchEventData]); // Include fetchEventData in useEffect dependencies
 
   /**
    * Handles changes to the audited stock input field.
