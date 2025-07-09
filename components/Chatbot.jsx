@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'; // For animations
 import toast from 'react-hot-toast'; // For notifications
 
 // IMPORTANT: Replace with the actual URL of your deployed Google Cloud Function
-const CLOUD_FUNCTION_URL = "https://ai-chatbot-proxy-ngi7urpmtq-uc.a.run.app"; // UPDATED URL
+const CLOUD_FUNCTION_URL = "https://us-central1-blackjack-8d304.cloudfunctions.net/ai-chatbot-proxy"; // UPDATED URL
 
 export default function Chatbot() {
   const { user, loading } = useAuth(); // Get authenticated user from context
