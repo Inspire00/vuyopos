@@ -1,13 +1,14 @@
 // app/(app)/current-pos/page.jsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../lib/firebase';
 import { collection, query, where, getDocs, doc, onSnapshot, runTransaction, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import Image from 'next/image'; // Import Image component
 
 export default function CurrentPOSPage() {
   const { user } = useAuth();
@@ -38,23 +39,8 @@ export default function CurrentPOSPage() {
   }, [orderItems]);
 
   // Effect to fetch active event and set up real-time listeners when user is available
-  useEffect(() => {
-    if (user) {
-      // This function will set up both event and beverage listeners
-      const cleanupListeners = fetchActiveEventAndListenForUpdates();
-      // Return the cleanup function to unsubscribe when component unmounts or user changes
-      return () => {
-        if (cleanupListeners) cleanupListeners();
-      };
-    }
-  }, [user]); // Rerun when user object changes
-
-  /**
-   * Fetches the active event for the current user and sets up real-time listeners
-   * for both the active event and its associated beverages.
-   * @returns {function} A cleanup function to unsubscribe from all listeners.
-   */
-  const fetchActiveEventAndListenForUpdates = () => {
+  // Wrapped in useCallback to stabilize the function for useEffect dependency
+  const fetchActiveEventAndListenForUpdates = useCallback(() => {
     if (!user) return () => {}; // Return no-op cleanup if no user
 
     setLoading(true);
@@ -132,7 +118,14 @@ export default function CurrentPOSPage() {
       unsubscribeEvent();
       unsubscribeBeverages();
     };
-  };
+  }, [user]); // Rerun when user object changes
+
+  useEffect(() => {
+    if (user) {
+      const cleanup = fetchActiveEventAndListenForUpdates();
+      return cleanup;
+    }
+  }, [user, fetchActiveEventAndListenForUpdates]); // Added fetchActiveEventAndListenForUpdates to dependencies
 
   /**
    * Handles adding a beverage to the current order.
@@ -440,7 +433,8 @@ export default function CurrentPOSPage() {
           </div>
 
           {/* Beverage Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto flex-1 pr-2 scrollbar-thin scrollbar-thumb-primary-gold scrollbar-track-dark-charcoal">
+          {/* REMOVED flex-1 from this div to prevent unnecessary vertical expansion */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary-gold scrollbar-track-dark-charcoal">
             {filteredBeverages.length === 0 ? (
               <p className="col-span-full text-cream-white text-center py-8">
                 No beverages found for this category or event.
@@ -456,9 +450,11 @@ export default function CurrentPOSPage() {
                   disabled={beverage.currentStock <= 0}
                 >
                   {beverage.imageUrl && (
-                    <img
+                    <Image // Changed from <img> to <Image>
                       src={beverage.imageUrl}
                       alt={beverage.name}
+                      width={100} // Example fixed width, adjust as needed
+                      height={100} // Example fixed height, adjust as needed
                       className="w-full h-24 sm:h-32 object-cover rounded-md mb-2 border border-dark-charcoal"
                     />
                   )}
