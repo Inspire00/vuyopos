@@ -1,33 +1,79 @@
+/* app/globals.css */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+/* Custom Scrollbar Styles */
+/* For Webkit browsers (Chrome, Safari) */
+::-webkit-scrollbar {
+  width: 8px; /* width of the scrollbar */
+  height: 8px; /* height of horizontal scrollbar */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+::-webkit-scrollbar-track {
+  background: #2a2d3c; /* Dark charcoal */
+  border-radius: 10px; /* Rounded corners for the track */
 }
 
+::-webkit-scrollbar-thumb {
+  background: #d4af37; /* Primary gold */
+  border-radius: 10px; /* Rounded corners for the thumb */
+  border: 2px solid #2a2d3c; /* Padding around the thumb */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #f0c950; /* Secondary gold on hover */
+}
+
+/* Optional: For Firefox (requires scrollbar-width and scrollbar-color) */
+html {
+  scrollbar-width: thin; /* "auto" or "thin" */
+  scrollbar-color: #d4af37 #2a2d3c; /* thumb and track color */
+}
+
+/* Base Styles (You can add more global styles here if needed) */
+html,
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  color: #e0e0e0; /* Cream white for default text */
+  background-color: #0D1117; /* Rich Black */
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+*, ::before, ::after {
+  box-sizing: border-box;
+}
+
+/* Utility to hide scrollbar while keeping functionality */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* For Firefox */
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+/* Basic Animations */
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0.8;
   }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out forwards;
 }
