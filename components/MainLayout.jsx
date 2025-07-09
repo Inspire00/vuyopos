@@ -84,7 +84,7 @@ export default function MainLayout({ children }) {
         </div>
 
          {/* Chair Image Container - Fixed height */}
-        <div className="w-full h-[400px] relative rounded-lg shadow-lg mb-8 flex items-center justify-center overflow-hidden">
+        <div className="w-full flex-1 relative rounded-lg shadow-lg mt-5 mb-5 flex items-center justify-center overflow-hidden">
           <Image
             src="/images/Chair.png" // Ensure this path is correct relative to your public directory
             alt="Decorative Chair Image"
