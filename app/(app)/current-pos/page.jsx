@@ -8,7 +8,8 @@ import { db } from '../../../lib/firebase';
 import { collection, query, where, getDocs, doc, onSnapshot, runTransaction, Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
-import Image from 'next/image'; // Import Image component
+// Removed 'Image' import to use standard <img> tag
+// import Image from 'next/image';
 
 export default function CurrentPOSPage() {
   const { user } = useAuth();
@@ -433,8 +434,7 @@ export default function CurrentPOSPage() {
           </div>
 
           {/* Beverage Grid */}
-          {/* REMOVED flex-1 from this div to prevent unnecessary vertical expansion */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary-gold scrollbar-track-dark-charcoal">
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary-gold scrollbar-track-dark-charcoal">
             {filteredBeverages.length === 0 ? (
               <p className="col-span-full text-cream-white text-center py-8">
                 No beverages found for this category or event.
@@ -450,11 +450,9 @@ export default function CurrentPOSPage() {
                   disabled={beverage.currentStock <= 0}
                 >
                   {beverage.imageUrl && (
-                    <Image // Changed from <img> to <Image>
+                    <img // Reverted to <img> tag for troubleshooting
                       src={beverage.imageUrl}
                       alt={beverage.name}
-                      width={100} // Example fixed width, adjust as needed
-                      height={100} // Example fixed height, adjust as needed
                       className="w-full h-24 sm:h-32 object-cover rounded-md mb-2 border border-dark-charcoal"
                     />
                   )}
