@@ -1,12 +1,12 @@
 // app/(app)/beverages/page.jsx
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react'; // Import useCallback
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db, storage } from '../../../lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore'; // Added deleteDoc
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; // Added deleteObject
 import toast from 'react-hot-toast';
 import Modal from '../../../components/Modal';
 import Link from 'next/link';
@@ -129,7 +129,7 @@ export default function BeveragesPage() {
       setNewBeveragePrice(0);
       setNewBeverageImage(null);
       setImagePreview(null);
-      fetchActiveEventAndBeverages();
+      fetchActiveEventAndBeverages(); // Refresh the list
     } catch (error) {
       console.error('Error creating beverage:', error);
       toast.error('Failed to add beverage.');
@@ -137,6 +137,46 @@ export default function BeveragesPage() {
       setLoading(false);
     }
   };
+
+  // New function to handle beverage deletion
+  const handleDeleteBeverage = async (beverageId, imageUrl) => {
+    if (!window.confirm('Are you sure you want to delete this beverage? This action cannot be undone.')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Delete image from Firebase Storage if it exists
+      if (imageUrl) {
+        const imageRef = ref(storage, imageUrl); // Create a storage reference from the URL
+        try {
+          await deleteObject(imageRef);
+          toast.success('Beverage image deleted from storage.');
+        } catch (storageError) {
+          // Handle cases where the image might not exist or permission issues
+          if (storageError.code === 'storage/object-not-found') {
+            console.warn('Image not found in storage, proceeding with document deletion.');
+          } else {
+            console.error('Error deleting beverage image from storage:', storageError);
+            toast.error('Failed to delete beverage image.');
+            // Decide if you want to stop deletion here or proceed with document deletion
+            // For robustness, we'll proceed to delete the document even if image deletion fails.
+          }
+        }
+      }
+
+      // 2. Delete beverage document from Firestore
+      await deleteDoc(doc(db, 'beverages', beverageId));
+      toast.success('Beverage deleted successfully!');
+      fetchActiveEventAndBeverages(); // Refresh the list
+    } catch (error) {
+      console.error('Error deleting beverage:', error);
+      toast.error('Failed to delete beverage.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -154,7 +194,7 @@ export default function BeveragesPage() {
           <button
             onClick={() => {
               if (!activeEvent) {
-                toast.error('Please select or create an active event first to add beverages.');
+                toast.error('Please create or select an active event first to add beverages.');
                 return;
               }
               setIsModalOpen(true);
@@ -178,13 +218,13 @@ export default function BeveragesPage() {
                 <p className="text-cream-white col-span-full text-center">No beverages added for this event yet.</p>
               ) : (
                 beverages.map((beverage) => (
-                  <div key={beverage.id} className="bg-deep-navy p-4 rounded-lg shadow-md border border-dark-charcoal hover:border-secondary-gold transform hover:scale-[1.02] transition-transform duration-200">
+                  <div key={beverage.id} className="bg-deep-navy p-4 rounded-lg shadow-md border border-dark-charcoal hover:border-secondary-gold transform hover:scale-[1.02] transition-transform duration-200 relative"> {/* Added relative for positioning delete button */}
                     {beverage.imageUrl && (
-                      <div className="w-full h-32 relative mb-3"> {/* Kept relative container for consistent sizing */}
-                        <img // Changed to <img> tag
+                      <div className="w-full h-32 relative mb-3">
+                        <img
                           src={beverage.imageUrl}
                           alt={beverage.name}
-                          className="object-cover rounded-md border border-dark-charcoal w-full h-full" // Added w-full h-full
+                          className="object-cover rounded-md border border-dark-charcoal w-full h-full"
                         />
                       </div>
                     )}
@@ -192,6 +232,18 @@ export default function BeveragesPage() {
                     <p className="text-sm text-primary-gold mb-2">{beverage.category} ({beverage.type})</p>
                     <p className="text-cream-white">Stock: <span className="font-bold">{beverage.currentStock}</span></p>
                     <p className="text-cream-white">Price: <span className="font-bold">R {beverage.price.toFixed(2)}</span></p>
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent card click from firing
+                        handleDeleteBeverage(beverage.id, beverage.imageUrl);
+                      }}
+                      className="absolute top-2 right-2 bg-burgundy hover:bg-red-700 text-cream-white rounded-full p-1 w-8 h-8 flex items-center justify-center text-lg font-bold transition-colors duration-200"
+                      title="Delete Beverage"
+                    >
+                      &times;
+                    </button>
                   </div>
                 ))
               )}
@@ -299,8 +351,8 @@ export default function BeveragesPage() {
                 onChange={handleImageChange}
               />
               {imagePreview && (
-                <div className="mt-4 relative w-32 h-32"> {/* Added relative container for image preview */}
-                  <img src={imagePreview} alt="Image Preview" className="object-cover rounded-md border border-dark-charcoal w-full h-full" /> {/* Changed to <img> and added w-full h-full */}
+                <div className="mt-4 relative w-32 h-32">
+                  <img src={imagePreview} alt="Image Preview" className="object-cover rounded-md border border-dark-charcoal w-full h-full" />
                 </div>
               )}
             </div>
