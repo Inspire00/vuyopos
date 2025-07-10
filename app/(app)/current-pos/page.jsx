@@ -1,7 +1,7 @@
 // app/(app)/current-pos/page.jsx
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../lib/firebase';
@@ -18,6 +18,8 @@ export default function CurrentPOSPage() {
   const [loading, setLoading] = useState(true);
   const [orderItems, setOrderItems] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  // New state to manage the string value of quantity inputs for better UX
+  const [editingQuantities, setEditingQuantities] = useState({});
 
   // Memoized list of all unique beverage categories for filtering
   const allCategories = useMemo(() => {
@@ -126,7 +128,22 @@ export default function CurrentPOSPage() {
       const cleanup = fetchActiveEventAndListenForUpdates();
       return cleanup;
     }
-  }, [user, fetchActiveEventAndListenForUpdates]); // Added fetchActiveEventAndListenForUpdates to dependencies
+  }, [user, fetchActiveEventAndListenForUpdates]);
+
+  // Effect to synchronize editingQuantities with orderItems
+  // This ensures that when orderItems change (e.g., item added/removed by +/- buttons),
+  // the input fields reflect the actual quantity, but also allows for user typing
+  useEffect(() => {
+    const newEditingQuantities = {};
+    orderItems.forEach(item => {
+      // Initialize or update with the actual item quantity as a string
+      // If the user was actively typing, we might want to preserve their input
+      // but for simplicity, we'll reset to the actual quantity on orderItems change.
+      newEditingQuantities[item.beverageId] = String(item.quantity);
+    });
+    setEditingQuantities(newEditingQuantities);
+  }, [orderItems]);
+
 
   /**
    * Handles adding a beverage to the current order.
@@ -192,47 +209,19 @@ export default function CurrentPOSPage() {
 
       if (newQuantity <= 0) {
         // If quantity becomes 0 or less, remove the item from the order
+        // Also clean up from editingQuantities state
+        setEditingQuantities(prev => {
+            const newState = { ...prev };
+            delete newState[beverageId];
+            return newState;
+        });
         return prevItems.filter(i => i.beverageId !== beverageId);
       }
       // Check if the new quantity exceeds the available stock
       if (newQuantity > beverageInStock.currentStock) {
         toast.error(`Cannot add more. Only ${beverageInStock.currentStock} left of ${item.name}.`);
-        return prevItems;
-      }
-
-      return prevItems.map(i =>
-        i.beverageId === beverageId
-          ? { ...i, quantity: newQuantity }
-          : i
-      );
-    });
-  };
-
-  /**
-   * Handles direct input of quantity for an item in the current order.
-   * @param {string} beverageId - The ID of the beverage to update.
-   * @param {string} value - The new quantity value from the input field.
-   */
-  const handleSetItemQuantity = (beverageId, value) => {
-    const parsedQuantity = parseInt(value, 10);
-
-    setOrderItems(prevItems => {
-      const itemIndex = prevItems.findIndex(item => item.beverageId === beverageId);
-      if (itemIndex === -1) return prevItems;
-
-      const beverageInStock = beverages.find(b => b.id === beverageId);
-      if (!beverageInStock) return prevItems;
-
-      // If input is empty or not a valid number, treat as 0 for now (or remove)
-      const newQuantity = isNaN(parsedQuantity) || parsedQuantity < 0 ? 0 : parsedQuantity;
-
-      if (newQuantity === 0) {
-        return prevItems.filter(i => i.beverageId !== beverageId);
-      }
-
-      if (newQuantity > beverageInStock.currentStock) {
-        toast.error(`Cannot set quantity to ${newQuantity}. Only ${beverageInStock.currentStock} left of ${beverageInStock.name}.`);
-        // Revert to max available stock or previous quantity
+        // Update the editingQuantities to reflect the max available, so input snaps back
+        setEditingQuantities(prev => ({ ...prev, [beverageId]: String(beverageInStock.currentStock) }));
         return prevItems.map(i =>
           i.beverageId === beverageId
             ? { ...i, quantity: beverageInStock.currentStock } // Set to max available
@@ -249,11 +238,77 @@ export default function CurrentPOSPage() {
   };
 
   /**
+   * Handles direct input of quantity for an item in the current order.
+   * Updates `editingQuantities` immediately for visual feedback.
+   * Only updates `orderItems` when a valid number is entered.
+   * @param {string} beverageId - The ID of the beverage to update.
+   * @param {string} value - The new quantity value from the input field (can be empty string).
+   */
+  const handleSetItemQuantity = (beverageId, value) => {
+    // Update the local editing state immediately for visual feedback
+    setEditingQuantities(prev => ({ ...prev, [beverageId]: value }));
+
+    // If the value is an empty string, do not process it further for orderItems update yet
+    // This allows the user to clear the field before typing a new number without removing the item
+    if (value === '') {
+      return;
+    }
+
+    const parsedQuantity = parseInt(value, 10);
+
+    setOrderItems(prevItems => {
+      const itemIndex = prevItems.findIndex(item => item.beverageId === beverageId);
+      if (itemIndex === -1) return prevItems;
+
+      const beverageInStock = beverages.find(b => b.id === beverageId);
+      if (!beverageInStock) return prevItems;
+
+      // If parsedQuantity is NaN (e.g., user types non-numeric characters) or negative, treat as 0 for removal
+      const newQuantity = isNaN(parsedQuantity) || parsedQuantity < 0 ? 0 : parsedQuantity;
+
+      if (newQuantity === 0) {
+        // If quantity becomes 0 or less, remove the item from the order
+        // Also clean up from editingQuantities state
+        setEditingQuantities(prev => {
+            const newState = { ...prev };
+            delete newState[beverageId];
+            return newState;
+        });
+        return prevItems.filter(i => i.beverageId !== beverageId);
+      }
+
+      if (newQuantity > beverageInStock.currentStock) {
+        toast.error(`Cannot set quantity to ${newQuantity}. Only ${beverageInStock.currentStock} left of ${beverageInStock.name}.`);
+        // Revert the input field to the max available stock
+        setEditingQuantities(prev => ({ ...prev, [beverageId]: String(beverageInStock.currentStock) }));
+        return prevItems.map(i =>
+          i.beverageId === beverageId
+            ? { ...i, quantity: beverageInStock.currentStock } // Set to max available
+            : i
+        );
+      }
+
+      // If valid and within stock, update the order item's quantity
+      return prevItems.map(i =>
+        i.beverageId === beverageId
+          ? { ...i, quantity: newQuantity }
+          : i
+      );
+    });
+  };
+
+  /**
    * Handles removing an item completely from the current order.
    * @param {string} beverageId - The ID of the beverage to remove.
    */
   const handleRemoveItem = (beverageId) => {
     setOrderItems(prevItems => prevItems.filter(item => item.beverageId !== beverageId));
+    // Also clean up from editingQuantities state
+    setEditingQuantities(prev => {
+        const newState = { ...prev };
+        delete newState[beverageId];
+        return newState;
+    });
   };
 
   /**
@@ -348,6 +403,7 @@ export default function CurrentPOSPage() {
       // If transaction succeeds
       toast.success('Order processed successfully!');
       setOrderItems([]); // Clear the order cart
+      setEditingQuantities({}); // Clear editing quantities too
     } catch (error) {
       console.error('Transaction failed:', error);
       // Display a user-friendly error message from the thrown error or a generic one
@@ -450,7 +506,7 @@ export default function CurrentPOSPage() {
                   disabled={beverage.currentStock <= 0}
                 >
                   {beverage.imageUrl && (
-                    <img // Reverted to <img> tag for troubleshooting
+                    <img // Using <img> tag for maximum compatibility during troubleshooting
                       src={beverage.imageUrl}
                       alt={beverage.name}
                       className="w-full h-24 sm:h-32 object-cover rounded-md mb-2 border border-dark-charcoal"
@@ -486,13 +542,14 @@ export default function CurrentPOSPage() {
                     >
                       -
                     </button>
-                    {/* Quantity Input Field */}
+                    {/* Quantity Input Field - now controlled by editingQuantities state */}
                     <input
                       type="number"
-                      value={item.quantity}
+                      // Use editingQuantities for the input's value, falling back to item.quantity
+                      value={editingQuantities[item.beverageId] !== undefined ? editingQuantities[item.beverageId] : String(item.quantity)}
                       onChange={(e) => handleSetItemQuantity(item.beverageId, e.target.value)}
                       className="bg-rich-black text-cream-white text-lg font-bold w-16 text-center rounded-md border border-dark-charcoal focus:outline-none focus:border-secondary-gold"
-                      min="1" // Minimum quantity is 1
+                      min="0" // Allow 0 for explicit removal via input
                     />
                     <button
                       onClick={() => handleUpdateItemQuantity(item.beverageId, 1)}
@@ -525,7 +582,10 @@ export default function CurrentPOSPage() {
               {loading ? 'Processing...' : 'Charge Order'}
             </button>
             <button
-              onClick={() => setOrderItems([])}
+              onClick={() => {
+                setOrderItems([]); // Clear the order cart
+                setEditingQuantities({}); // Clear editing quantities too
+              }}
               className="w-full bg-dark-charcoal hover:bg-gray-700 text-cream-white font-bold py-3 mt-3 rounded-lg text-lg transition-colors duration-200 disabled:opacity-50"
               disabled={loading || orderItems.length === 0}
             >
