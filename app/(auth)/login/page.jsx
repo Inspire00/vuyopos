@@ -89,7 +89,7 @@ export default function LoginPage() {
             </p>
           ) : (
             <p>
-             Please Whatsapp 📲 +27828408141
+             Dont have an account? Please Whatsapp 📲 +27828408141
             </p>
           )}
         </div>
