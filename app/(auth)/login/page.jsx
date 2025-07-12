@@ -89,13 +89,7 @@ export default function LoginPage() {
             </p>
           ) : (
             <p>
-              Don&apos;t have an account?{' '} {/* Fixed unescaped apostrophe */}
-              <button
-                onClick={() => setIsRegistering(true)}
-                className="text-secondary-gold hover:underline focus:outline-none"
-              >
-                Register
-              </button>
+             Please Whatsapp 📲 +27828408141
             </p>
           )}
         </div>
