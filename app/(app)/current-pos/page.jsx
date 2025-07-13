@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../lib/firebase';
-import { collection, query, where, getDocs, doc, onSnapshot, runTransaction, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, runTransaction, Timestamp, updateDoc } from 'firebase/firestore'; // Added updateDoc
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 // Removed 'Image' import to use standard <img> tag
@@ -20,6 +20,10 @@ export default function CurrentPOSPage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   // New state to manage the string value of quantity inputs for better UX
   const [editingQuantities, setEditingQuantities] = useState({});
+
+  // New states for budget editing
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [editedBudget, setEditedBudget] = useState('');
 
   // Memoized list of all unique beverage categories for filtering
   const allCategories = useMemo(() => {
@@ -73,7 +77,12 @@ export default function CurrentPOSPage() {
         // 2. Set up real-time listener for the active event document
         unsubscribeEvent = onSnapshot(doc(db, 'events', activeEvtId), (docSnap) => {
           if (docSnap.exists()) {
-            setActiveEvent({ id: docSnap.id, ...docSnap.data() });
+            const eventData = { id: docSnap.id, ...docSnap.data() };
+            setActiveEvent(eventData);
+            // When activeEvent updates, ensure editedBudget reflects the current budget
+            if (!isEditingBudget) { // Only update if not currently editing to avoid overwriting user input
+                setEditedBudget(String(eventData.budget));
+            }
           } else {
             // Active event was deleted or deactivated from outside
             setActiveEvent(null);
@@ -121,7 +130,7 @@ export default function CurrentPOSPage() {
       unsubscribeEvent();
       unsubscribeBeverages();
     };
-  }, [user]); // Rerun when user object changes
+  }, [user, isEditingBudget]); // Rerun when user object changes, and when editing state changes
 
   useEffect(() => {
     if (user) {
@@ -131,14 +140,9 @@ export default function CurrentPOSPage() {
   }, [user, fetchActiveEventAndListenForUpdates]);
 
   // Effect to synchronize editingQuantities with orderItems
-  // This ensures that when orderItems change (e.g., item added/removed by +/- buttons),
-  // the input fields reflect the actual quantity, but also allows for user typing
   useEffect(() => {
     const newEditingQuantities = {};
     orderItems.forEach(item => {
-      // Initialize or update with the actual item quantity as a string
-      // If the user was actively typing, we might want to preserve their input
-      // but for simplicity, we'll reset to the actual quantity on orderItems change.
       newEditingQuantities[item.beverageId] = String(item.quantity);
     });
     setEditingQuantities(newEditingQuantities);
@@ -312,6 +316,53 @@ export default function CurrentPOSPage() {
   };
 
   /**
+   * Handles updating the event budget.
+   * @param {string} newValue - The new budget value from the input field.
+   */
+  const handleUpdateBudget = async (newValue) => {
+    setIsEditingBudget(false); // Exit editing mode immediately
+
+    const parsedBudget = parseFloat(newValue);
+
+    if (isNaN(parsedBudget) || parsedBudget <= 0) {
+      toast.error('Budget must be a positive number.');
+      // Revert the input field to the previous valid budget
+      setEditedBudget(String(activeEvent.budget));
+      return;
+    }
+
+    // Ensure new budget is not less than current spend
+    if (parsedBudget < activeEvent.currentSpend) {
+      toast.error(`New budget cannot be less than current spend (R ${activeEvent.currentSpend.toFixed(2)}).`);
+      // Revert the input field to the previous valid budget
+      setEditedBudget(String(activeEvent.budget));
+      return;
+    }
+
+    // Only update if the value has actually changed to avoid unnecessary writes
+    if (parsedBudget === activeEvent.budget) {
+      return;
+    }
+
+    setLoading(true); // Show loading while saving
+    try {
+      const eventRef = doc(db, 'events', activeEvent.id);
+      await updateDoc(eventRef, {
+        budget: parsedBudget,
+        updatedAt: Timestamp.now(),
+      });
+      toast.success('Budget updated successfully!');
+    } catch (error) {
+      console.error('Error updating budget:', error);
+      toast.error('Failed to update budget.');
+      // Revert the input field on error
+      setEditedBudget(String(activeEvent.budget));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
    * Processes the entire order as a Firestore transaction.
    * Updates event spend, beverage stock, and records the new order.
    */
@@ -459,7 +510,34 @@ export default function CurrentPOSPage() {
             <h3 className="text-lg font-semibold text-cream-white mb-2">Bar Budget Status</h3>
             <div className="text-cream-white text-sm mb-2">
               <span className="font-bold text-secondary-gold">Spent:</span> R {activeEvent.currentSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /{' '}
-              <span className="font-bold text-primary-gold">Budget:</span> R {activeEvent.budget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="font-bold text-primary-gold">Budget:</span>{' '}
+              {isEditingBudget ? (
+                <input
+                  type="number"
+                  value={editedBudget}
+                  onChange={(e) => setEditedBudget(e.target.value)}
+                  onBlur={(e) => handleUpdateBudget(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.target.blur(); // Trigger onBlur to save
+                    }
+                  }}
+                  className="bg-rich-black text-primary-gold font-bold py-1 px-2 rounded-md w-28 text-right focus:outline-none focus:border-secondary-gold"
+                  min={activeEvent.currentSpend} // Minimum value is current spend
+                  step="0.01"
+                  autoFocus // Automatically focus when it becomes an input
+                />
+              ) : (
+                <span
+                  className="font-bold text-primary-gold cursor-pointer hover:underline"
+                  onClick={() => {
+                    setIsEditingBudget(true);
+                    setEditedBudget(String(activeEvent.budget)); // Initialize input with current budget
+                  }}
+                >
+                  R {activeEvent.budget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
             <div className="w-full bg-rich-black rounded-full h-3">
               <div
