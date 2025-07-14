@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
-import CustomBarChart from './BarChart'; // Import the BarChart component
+import CustomBarChart from '../../../components/BarChart'; // Import the BarChart component
 
 /**
  * StatsPage component provides an interface for analyzing past event data.
