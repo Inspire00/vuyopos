@@ -1,10 +1,14 @@
 // StatsPage.jsx
-"use client";
+"use client"; // Mark as a Client Component
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
-import CustomBarChart from '../../../components/BarChart'; // Import the BarChart component
+// Import Firebase instances from your central setup
+import { db } from '../../../lib/firebase';
+// Import useAuth from your AuthContext
+import { useAuth } from '../../../context/AuthContext';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import CustomBarChart from '../../../components/BarChart'; // Corrected import path for BarChart component
+import toast from 'react-hot-toast'; // Import toast for notifications
 
 /**
  * StatsPage component provides an interface for analyzing past event data.
@@ -13,11 +17,13 @@ import CustomBarChart from '../../../components/BarChart'; // Import the BarChar
  * Users can filter the data by event name and beverage type (All, Non-Alcoholic, Alcoholic).
  */
 const StatsPage = () => {
-  // --- Firebase State ---
-  const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  // Use useAuth hook to get user and authentication loading state
+  const { user, loading: authLoading } = useAuth();
+  // We no longer need local db and auth states as they come from lib/firebase
+  // const [db, setDb] = useState(null);
+  // const [auth, setAuth] = useState(null);
+  // const [userId, setUserId] = useState(null); // userId will now come directly from user.uid
+  // const [isAuthReady, setIsAuthReady] = useState(false); // Derived from authLoading and user
 
   // --- Data State ---
   // Stores all raw past event data (events, beverages, orders)
@@ -31,7 +37,8 @@ const StatsPage = () => {
   const [selectedBeverageTypeFilter, setSelectedBeverageTypeFilter] = useState('All');
 
   // --- UI State ---
-  const [loading, setLoading] = useState(true);
+  // Combine authLoading with data fetching loading
+  const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(''); // General messages to the user
 
@@ -41,74 +48,32 @@ const StatsPage = () => {
     'alcoholic': ['Red Wine', 'White Wine', 'Beers', 'Ciders', 'Strong Drink', 'Other Alcoholic'],
   }), []);
 
-  // --- Firebase Initialization and Authentication Listener ---
-  useEffect(() => {
-    try {
-      const firebaseConfig = typeof __firebase_config !== 'undefined'
-        ? JSON.parse(__firebase_config)
-        : {};
-
-      const app = initializeApp(firebaseConfig);
-      const firestoreDb = getFirestore(app);
-      const firebaseAuth = getAuth(app);
-
-      setDb(firestoreDb);
-      setAuth(firebaseAuth);
-
-      const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
-        if (user) {
-          setUserId(user.uid);
-          setIsAuthReady(true);
-          console.log("Firebase Auth Ready. User UID:", user.uid);
-        } else {
-          try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(firebaseAuth, __initial_auth_token);
-              console.log("Signed in with custom token.");
-            } else {
-              await signInAnonymously(firebaseAuth);
-              console.log("Signed in anonymously.");
-            }
-          } catch (authError) {
-            console.error("Firebase Auth Error:", authError);
-            setError("Authentication failed. Please try again.");
-          } finally {
-            setIsAuthReady(true);
-          }
-        }
-      });
-
-      return () => unsubscribe();
-    } catch (initError) {
-      console.error("Firebase Initialization Error:", initError);
-      setError("Failed to initialize Firebase. Please check your configuration.");
-      setLoading(false);
-    }
-  }, []);
-
   // --- Data Fetching Logic (using useCallback for stability) ---
   const fetchAllPastEventsData = useCallback(async () => {
-    if (!isAuthReady || !db || !userId) {
-      console.log("Firebase not ready or userId not available. Skipping data fetch.");
+    // Only proceed if user is authenticated and db is available
+    if (authLoading || !user || !db) {
+      console.log("Auth not ready, user not available, or db not initialized. Skipping data fetch.");
       return;
     }
 
-    setLoading(true);
+    setDataLoading(true); // Set data loading true when starting fetch
     setError(null);
     setMessage('');
 
     try {
+      const userId = user.uid; // Get UID from authenticated user
       console.log("Fetching all past events data for user:", userId);
       const eventsRef = collection(db, 'events');
       const qEvents = query(eventsRef, where('eventManagerId', '==', userId), where('isActive', '==', false));
       
+      // Use onSnapshot for real-time updates
       const unsubscribeEvents = onSnapshot(qEvents, async (eventSnapshot) => {
         const events = eventSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         console.log(`Found ${events.length} past events.`);
 
         if (events.length === 0) {
           setAllEventsRawData({ events: [], beverages: {}, orders: [] });
-          setLoading(false);
+          setDataLoading(false);
           setMessage("No past events found for analysis. Please ensure you have deactivated events.");
           return;
         }
@@ -135,41 +100,44 @@ const StatsPage = () => {
               console.log(`Found ${allOrders.length} orders across past events.`);
 
               setAllEventsRawData({ events, beverages: allBeverages, orders: allOrders });
-              setLoading(false);
+              setDataLoading(false); // Data loading complete
               setMessage('');
             }, (err) => {
               console.error("Error fetching orders:", err);
               setError("Failed to load order data.");
-              setLoading(false);
+              setDataLoading(false);
             });
             return unsubscribeOrders;
           }, (err) => {
             console.error("Error fetching beverages:", err);
             setError("Failed to load beverage data.");
-            setLoading(false);
+            setDataLoading(false);
           });
           return unsubscribeBeverages;
         } else {
-          setLoading(false);
+          setDataLoading(false);
           setMessage("No past events found for analysis.");
         }
       }, (err) => {
         console.error("Error fetching events:", err);
         setError("Failed to load event data.");
-        setLoading(false);
+        setDataLoading(false);
       });
 
-      return () => unsubscribeEvents();
+      return () => unsubscribeEvents(); // Cleanup function for event listener
     } catch (err) {
       console.error("Error in fetchAllPastEventsData:", err);
       setError("An unexpected error occurred while fetching data.");
-      setLoading(false);
+      setDataLoading(false);
     }
-  }, [isAuthReady, db, userId]); // Dependencies for useCallback
+  }, [authLoading, user]); // Dependencies for useCallback: user and authLoading
 
   useEffect(() => {
-    fetchAllPastEventsData();
-  }, [fetchAllPastEventsData]); // Re-run when the memoized fetch function changes
+    // Only attempt to fetch data if Firebase is initialized and user is available
+    if (!authLoading && user) {
+      fetchAllPastEventsData();
+    }
+  }, [authLoading, user, fetchAllPastEventsData]); // Re-run when auth state or memoized fetch function changes
 
   // --- Data Processing and Filtering Logic (using useCallback for stability) ---
   const aggregateAndFilterChartData = useCallback(() => {
@@ -233,22 +201,28 @@ const StatsPage = () => {
     } else {
       setMessage(''); // Clear message if data is found
     }
-  }, [allEventsRawData, eventNameFilter, selectedBeverageTypeFilter, beverageTypeCategories]); // Dependencies for useCallback
+  }, [allEventsRawData, eventNameFilter, selectedBeverageTypeFilter, beverageTypeCategories]);
 
   useEffect(() => {
     aggregateAndFilterChartData();
-  }, [aggregateAndFilterChartData]); // Re-run when the memoized aggregation function changes
+  }, [aggregateAndFilterChartData]);
 
   // --- Render Logic ---
-  if (loading) {
+  // Show loading if authentication is still in progress OR data is being fetched
+  if (authLoading || dataLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
         <div className="text-center text-gray-700 text-lg font-semibold">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          Loading past event data...
+          {authLoading ? 'Authenticating...' : 'Loading past event data...'}
         </div>
       </div>
     );
+  }
+
+  // If not loading and no user, redirect to login (handled by AuthContext/MainLayout)
+  if (!user) {
+    return null; // MainLayout or AuthProvider should handle redirection
   }
 
   if (error) {
