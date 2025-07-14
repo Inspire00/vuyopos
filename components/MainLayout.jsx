@@ -68,7 +68,7 @@ export default function MainLayout({ children }) {
 
               <li className="mb-4">
                 <Link href="/stats" className="flex items-center text-cream-white hover:text-secondary-gold transition-colors duration-200">
-                  <span className="mr-2">🛒</span> Past Events
+                  <span className="mr-2">🧮</span> Stats
                 </Link>
               </li>
 
