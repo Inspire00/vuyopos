@@ -23,7 +23,8 @@ const ChatbotModal = ({ isOpen, onClose, userEmail }) => {
   const messagesEndRef = useRef(null);
 
   // IMPORTANT: Replace with the actual URL of your deployed Google Cloud Function
-    const CLOUD_FUNCTION_URL = "https://ai-chatbot-proxy-ngi7urpmtq-uc.a.run.app"; // CORRECTED URL
+    const CLOUD_FUNCTION_URL = "https://ai-chatbot-proxy-ngi7urpmtq-uc.a.run.app"; 
+    // CORRECTED URL
 
   // Scroll to the bottom of the chat whenever messages change
   useEffect(() => {
