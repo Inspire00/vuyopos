@@ -9,7 +9,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import CustomBarChart from '../../../components/BarChart'; // Corrected import path for BarChart component
 import toast from 'react-hot-toast'; // Import toast for notifications
-import ChatbotModal from '../../../components/ChatbotModal'; // Import the new ChatbotModal
+import ChatBotModal from '../../../components/ChatbotModal'; // Import the new ChatbotModal
 
 /**
  * StatsPage component provides an interface for analyzing past event data.
