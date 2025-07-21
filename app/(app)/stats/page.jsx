@@ -9,6 +9,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import CustomBarChart from '../../../components/BarChart'; // Corrected import path for BarChart component
 import toast from 'react-hot-toast'; // Import toast for notifications
+import ChatbotModal from '../../../components/ChatbotModal'; // Import the new ChatbotModal
 
 /**
  * StatsPage component provides an interface for analyzing past event data.
@@ -19,11 +20,6 @@ import toast from 'react-hot-toast'; // Import toast for notifications
 const StatsPage = () => {
   // Use useAuth hook to get user and authentication loading state
   const { user, loading: authLoading } = useAuth();
-  // We no longer need local db and auth states as they come from lib/firebase
-  // const [db, setDb] = useState(null);
-  // const [auth, setAuth] = useState(null);
-  // const [userId, setUserId] = useState(null); // userId will now come directly from user.uid
-  // const [isAuthReady, setIsAuthReady] = useState(false); // Derived from authLoading and user
 
   // --- Data State ---
   // Stores all raw past event data (events, beverages, orders)
@@ -41,6 +37,8 @@ const StatsPage = () => {
   const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(''); // General messages to the user
+  // State to control Chatbot Modal visibility
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
 
   // Define beverage categories by type for consistent grouping
   const beverageTypeCategories = useMemo(() => ({
@@ -313,10 +311,29 @@ const StatsPage = () => {
           </section>
         </main>
 
-        <footer className="bg-gray-800 text-white p-4 text-center text-sm">
+        <footer className="bg-gray-800 text-white p-4 text-center text-sm flex justify-between items-center">
           <p>&copy; {new Date().getFullYear()} Bar POS Analytics. All rights reserved.</p>
+          {/* Chat with AI Button */}
+          <button
+            onClick={() => setIsChatModalOpen(true)}
+            className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-all duration-200 flex items-center space-x-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.516 12.095 2 11.101 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9a1 1 0 100-2 1 1 0 000 2zm7-2a1 1 0 10-2 0 1 1 0 002 0zm-4 4a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+            <span>Chat with AI</span>
+          </button>
         </footer>
       </div>
+
+      {/* Chatbot Modal */}
+      {user && ( // Only render if user exists, so user.email is available
+        <ChatbotModal
+          isOpen={isChatModalOpen}
+          onClose={() => setIsChatModalOpen(false)}
+          userEmail={user.email}
+        />
+      )}
     </div>
   );
 };
