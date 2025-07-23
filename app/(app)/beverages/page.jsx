@@ -5,20 +5,24 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db, storage } from '../../../lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore'; // Added deleteDoc
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; // Added deleteObject
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp, runTransaction, deleteDoc } from 'firebase/firestore'; // Import deleteDoc
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; // Import deleteObject
 import toast from 'react-hot-toast';
 import Modal from '../../../components/Modal';
 import Link from 'next/link';
-// Removed 'Image' import to use standard <img> tag
-// import Image from 'next/image';
+import RestockModal from '../../../components/RestockModal';
 
 export default function BeveragesPage() {
   const { user } = useAuth();
-  const [activeEvent, setActiveEvent] = useState(null);
+  const [allActiveEvents, setAllActiveEvents] = useState([]); // Stores all active events
+  const [selectedEventId, setSelectedEventId] = useState(''); // Stores the ID of the currently selected active event
+  const [currentEventData, setCurrentEventData] = useState(null); // Stores the full data of the selected active event
   const [beverages, setBeverages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false); // For Add Beverage Modal
+  const [isRestockModalOpen, setIsRestockModalOpen] = useState(false); // For Restock Modal
+  const [beverageToRestock, setBeverageToRestock] = useState(null); // The beverage object being restocked
+
   const [newBeverageName, setNewBeverageName] = useState('');
   const [newBeverageCategory, setNewBeverageCategory] = useState('Other Non-Alcoholic');
   const [newBeverageType, setNewBeverageType] = useState('non-alcoholic');
@@ -32,43 +36,73 @@ export default function BeveragesPage() {
     'alcoholic': ['Red Wine', 'White Wine', 'Beers', 'Ciders', 'Strong Drink', 'Other Alcoholic'],
   }), []);
 
-  // Wrap fetchActiveEventAndBeverages in useCallback
-  const fetchActiveEventAndBeverages = useCallback(async () => {
+  // Function to fetch all active events for the user
+  const fetchAllActiveEvents = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
       const qEvents = query(collection(db, 'events'), where('eventManagerId', '==', user.uid), where('isActive', '==', true));
       const eventSnapshot = await getDocs(qEvents);
-      if (eventSnapshot.empty) {
-        setActiveEvent(null);
-        setBeverages([]);
-        setLoading(false);
-        return;
-      }
-      const activeEvt = { id: eventSnapshot.docs[0].id, ...eventSnapshot.docs[0].data() };
-      setActiveEvent(activeEvt);
+      const fetchedEvents = eventSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setAllActiveEvents(fetchedEvents);
 
-      const qBeverages = query(collection(db, 'beverages'), where('eventId', '==', activeEvt.id));
+      // If there are active events, set the first one as selected by default
+      if (fetchedEvents.length > 0) {
+        setSelectedEventId(fetchedEvents[0].id);
+        setCurrentEventData(fetchedEvents[0]);
+      } else {
+        setSelectedEventId('');
+        setCurrentEventData(null);
+      }
+    } catch (error) {
+      console.error('Error fetching active events:', error);
+      toast.error('Failed to load active events.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Function to fetch beverages for the currently selected event
+  const fetchBeveragesForSelectedEvent = useCallback(async () => {
+    if (!selectedEventId) {
+      setBeverages([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const qBeverages = query(collection(db, 'beverages'), where('eventId', '==', selectedEventId));
       const beverageSnapshot = await getDocs(qBeverages);
       const fetchedBeverages = beverageSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       }));
       setBeverages(fetchedBeverages);
-
     } catch (error) {
-      console.error('Error fetching active event or beverages:', error);
-      toast.error('Failed to load event data.');
+      console.error('Error fetching beverages for selected event:', error);
+      toast.error('Failed to load beverages.');
     } finally {
       setLoading(false);
     }
-  }, [user]); // Add user to useCallback dependencies
+  }, [selectedEventId]);
 
+  // Effect to initially fetch all active events when user loads
   useEffect(() => {
     if (user) {
-      fetchActiveEventAndBeverages();
+      fetchAllActiveEvents();
     }
-  }, [user, fetchActiveEventAndBeverages]); // Include fetchActiveEventAndBeverages in useEffect dependencies
+  }, [user, fetchAllActiveEvents]);
+
+  // Effect to re-fetch beverages whenever the selectedEventId changes
+  useEffect(() => {
+    fetchBeveragesForSelectedEvent();
+    // Update currentEventData when selectedEventId changes
+    const selectedEvent = allActiveEvents.find(event => event.id === selectedEventId);
+    setCurrentEventData(selectedEvent || null);
+  }, [selectedEventId, fetchBeveragesForSelectedEvent, allActiveEvents]);
+
 
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -83,8 +117,8 @@ export default function BeveragesPage() {
 
   const handleCreateBeverage = async (e) => {
     e.preventDefault();
-    if (!user || !activeEvent) {
-      toast.error('Please select or create an active event first.');
+    if (!user || !selectedEventId) {
+      toast.error('Please select an active event to add beverages to.');
       return;
     }
     if (newBeverageQuantity <= 0 || newBeveragePrice <= 0) {
@@ -96,7 +130,7 @@ export default function BeveragesPage() {
     let imageUrl = '';
     if (newBeverageImage) {
       try {
-        const imageRef = ref(storage, `beverages/${activeEvent.id}/${newBeverageImage.name}_${Date.now()}`);
+        const imageRef = ref(storage, `beverages/${selectedEventId}/${newBeverageImage.name}_${Date.now()}`);
         await uploadBytes(imageRef, newBeverageImage);
         imageUrl = await getDownloadURL(imageRef);
       } catch (uploadError) {
@@ -109,7 +143,7 @@ export default function BeveragesPage() {
 
     try {
       await addDoc(collection(db, 'beverages'), {
-        eventId: activeEvent.id,
+        eventId: selectedEventId, // Use the selected event ID
         name: newBeverageName,
         category: newBeverageCategory,
         type: newBeverageType,
@@ -129,7 +163,7 @@ export default function BeveragesPage() {
       setNewBeveragePrice(0);
       setNewBeverageImage(null);
       setImagePreview(null);
-      fetchActiveEventAndBeverages(); // Refresh the list
+      fetchBeveragesForSelectedEvent(); // Re-fetch beverages for the current selected event
     } catch (error) {
       console.error('Error creating beverage:', error);
       toast.error('Failed to add beverage.');
@@ -138,40 +172,98 @@ export default function BeveragesPage() {
     }
   };
 
-  // New function to handle beverage deletion
-  const handleDeleteBeverage = async (beverageId, imageUrl) => {
-    if (!window.confirm('Are you sure you want to delete this beverage? This action cannot be undone.')) {
+  // Function to open the restock modal for a specific beverage
+  const handleOpenRestockModal = (beverage) => {
+    setBeverageToRestock(beverage);
+    setIsRestockModalOpen(true);
+  };
+
+  // Function to handle the restock confirmation from the modal
+  const handleRestockConfirm = async (additionalQuantity, password) => {
+    // --- SECURITY WARNING ---
+    // Hardcoding password "2018" in client-side code is highly insecure.
+    // For a production application, password validation should always happen on a secure backend
+    // (e.g., Cloud Function, Firebase Security Rules, or a dedicated authentication service)
+    // and ideally involve hashing and proper user authentication/authorization.
+    // This implementation is for demonstration purposes based on the request.
+    // --- END SECURITY WARNING ---
+
+    if (password !== '2018') {
+      toast.error('Incorrect password. Stock update denied.');
+      return;
+    }
+
+    if (!beverageToRestock || additionalQuantity <= 0) {
+      toast.error('Invalid restock request.');
+      return;
+    }
+
+    setLoading(true); // Set loading for the restock operation
+    try {
+      await runTransaction(db, async (transaction) => {
+        const beverageRef = doc(db, 'beverages', beverageToRestock.id);
+        const beverageDoc = await transaction.get(beverageRef);
+
+        if (!beverageDoc.exists()) {
+          throw new Error('Beverage not found!');
+        }
+
+        const currentBeverageData = beverageDoc.data();
+        const newInitialStock = currentBeverageData.initialStock + additionalQuantity;
+        const newCurrentStock = currentBeverageData.currentStock + additionalQuantity;
+
+        transaction.update(beverageRef, {
+          initialStock: newInitialStock,
+          currentStock: newCurrentStock,
+          updatedAt: Timestamp.now(),
+        });
+      });
+
+      toast.success(`${beverageToRestock.name} stock updated successfully! New total: ${beverageToRestock.currentStock + additionalQuantity}`);
+      setIsRestockModalOpen(false);
+      setBeverageToRestock(null);
+      fetchBeveragesForSelectedEvent(); // Re-fetch beverages to show updated stock
+    } catch (error) {
+      console.error('Error restocking beverage:', error);
+      toast.error(`Failed to restock ${beverageToRestock.name}: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to handle deleting a beverage
+  const handleDeleteBeverage = async (beverageId, beverageName, imageUrl) => {
+    if (!user) {
+      toast.error('You must be logged in to delete beverages.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${beverageName}? This action cannot be undone.`)) {
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Delete image from Firebase Storage if it exists
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'beverages', beverageId));
+
+      // Delete image from Storage if it exists
       if (imageUrl) {
-        const imageRef = ref(storage, imageUrl); // Create a storage reference from the URL
         try {
+          const imageRef = ref(storage, imageUrl);
           await deleteObject(imageRef);
-          toast.success('Beverage image deleted from storage.');
+          console.log('Image deleted from storage successfully.');
         } catch (storageError) {
-          // Handle cases where the image might not exist or permission issues
-          if (storageError.code === 'storage/object-not-found') {
-            console.warn('Image not found in storage, proceeding with document deletion.');
-          } else {
-            console.error('Error deleting beverage image from storage:', storageError);
-            toast.error('Failed to delete beverage image.');
-            // Decide if you want to stop deletion here or proceed with document deletion
-            // For robustness, we'll proceed to delete the document even if image deletion fails.
-          }
+          console.warn('Could not delete image from storage (it might not exist or permissions issue):', storageError);
+          // Don't block deletion if image deletion fails
         }
       }
 
-      // 2. Delete beverage document from Firestore
-      await deleteDoc(doc(db, 'beverages', beverageId));
-      toast.success('Beverage deleted successfully!');
-      fetchActiveEventAndBeverages(); // Refresh the list
+      toast.success(`${beverageName} deleted successfully!`);
+      fetchBeveragesForSelectedEvent(); // Re-fetch beverages to update the list
     } catch (error) {
       console.error('Error deleting beverage:', error);
-      toast.error('Failed to delete beverage.');
+      toast.error(`Failed to delete ${beverageName}: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -193,64 +285,98 @@ export default function BeveragesPage() {
           <h1 className="text-3xl font-bold text-cream-white">Beverage Management</h1>
           <button
             onClick={() => {
-              if (!activeEvent) {
-                toast.error('Please create or select an active event first to add beverages.');
+              if (!selectedEventId) {
+                toast.error('Please select an active event first to add beverages.');
                 return;
               }
               setIsModalOpen(true);
             }}
             className="bg-primary-gold hover:bg-secondary-gold text-rich-black font-bold py-2 px-4 rounded transition-colors duration-200"
+            disabled={!selectedEventId} // Disable if no event is selected
           >
             Add New Beverage
           </button>
         </div>
 
-        {!activeEvent ? (
+        {allActiveEvents.length === 0 ? (
           <div className="bg-deep-navy p-6 rounded-lg text-cream-white text-center border border-burgundy">
-            <p className="text-lg mb-4">No active event found.</p>
-            <p>Please go to the <Link href="/events" className="text-secondary-gold hover:underline">Events page</Link> to create or set an event as current before adding beverages.</p>
+            <p className="text-lg mb-4">No active events found.</p>
+            <p>Please go to the <Link href="/events" className="text-secondary-gold hover:underline">Events page</Link> to create or set an event as active before managing beverages.</p>
           </div>
         ) : (
           <>
-            <h2 className="text-2xl font-bold text-secondary-gold mb-4">Beverages for: {activeEvent.name}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {beverages.length === 0 ? (
-                <p className="text-cream-white col-span-full text-center">No beverages added for this event yet.</p>
-              ) : (
-                beverages.map((beverage) => (
-                  <div key={beverage.id} className="bg-deep-navy p-4 rounded-lg shadow-md border border-dark-charcoal hover:border-secondary-gold transform hover:scale-[1.02] transition-transform duration-200 relative"> {/* Added relative for positioning delete button */}
-                    {beverage.imageUrl && (
-                      <div className="w-full h-32 relative mb-3">
-                        <img
-                          src={beverage.imageUrl}
-                          alt={beverage.name}
-                          className="object-cover rounded-md border border-dark-charcoal w-full h-full"
-                        />
-                      </div>
-                    )}
-                    <h3 className="text-xl font-semibold text-cream-white truncate mb-1">{beverage.name}</h3>
-                    <p className="text-sm text-primary-gold mb-2">{beverage.category} ({beverage.type})</p>
-                    <p className="text-cream-white">Stock: <span className="font-bold">{beverage.currentStock}</span></p>
-                    <p className="text-cream-white">Price: <span className="font-bold">R {beverage.price.toFixed(2)}</span></p>
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent card click from firing
-                        handleDeleteBeverage(beverage.id, beverage.imageUrl);
-                      }}
-                      className="absolute top-2 right-2 bg-burgundy hover:bg-red-700 text-cream-white rounded-full p-1 w-8 h-8 flex items-center justify-center text-lg font-bold transition-colors duration-200"
-                      title="Delete Beverage"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                ))
-              )}
+            <div className="mb-4">
+              <label htmlFor="event-select" className="block text-cream-white text-sm font-bold mb-2">
+                Select Active Event:
+              </label>
+              <select
+                id="event-select"
+                className="shadow border border-dark-charcoal rounded w-full md:w-1/2 py-2 px-3 bg-rich-black text-cream-white leading-tight focus:outline-none focus:shadow-outline focus:border-secondary-gold"
+                value={selectedEventId}
+                onChange={(e) => setSelectedEventId(e.target.value)}
+              >
+                {allActiveEvents.map(event => (
+                  <option key={event.id} value={event.id}>
+                    {event.name} ({new Date(event.date).toLocaleDateString()})
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {currentEventData ? (
+              <>
+                <h2 className="text-2xl font-bold text-secondary-gold mb-4">Beverages for: {currentEventData.name}</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {beverages.length === 0 ? (
+                    <p className="col-span-full text-cream-white text-center">No beverages added for this event yet.</p>
+                  ) : (
+                    beverages.map((beverage) => (
+                      <div key={beverage.id} className="bg-deep-navy p-4 rounded-lg shadow-md border border-dark-charcoal hover:border-secondary-gold transform hover:scale-[1.02] transition-transform duration-200">
+                        {beverage.imageUrl && (
+                          <div className="w-full h-52 relative mb-3">
+                            <img
+                              src={beverage.imageUrl}
+                              alt={beverage.name}
+                              className="object-cover rounded-md border border-dark-charcoal w-full h-full" // Use w-full h-full for object-cover
+                              onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/128x128/333333/FFFFFF?text=No+Image'; }} // Fallback
+                            />
+                          </div>
+                        )}
+                        <h3 className="text-xl font-semibold text-cream-white truncate mb-1">{beverage.name}</h3>
+                        <p className="text-sm text-primary-gold mb-2">{beverage.category} ({beverage.type})</p>
+                        <p className="text-cream-white">Stock: <span className="font-bold">{beverage.currentStock}</span></p>
+                        <p className="text-cream-white">Price: <span className="font-bold">R {beverage.price.toFixed(2)}</span></p>
+                        <div className="flex space-x-2 mt-4">
+                          <button
+                            onClick={() => handleOpenRestockModal(beverage)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded transition-colors duration-200 disabled:opacity-50"
+                            disabled={loading}
+                          >
+                            Restock
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBeverage(beverage.id, beverage.name, beverage.imageUrl)}
+                            className="flex-1 bg-burgundy hover:bg-red-700 text-white text-sm font-bold py-2 px-2 rounded transition-colors duration-200 disabled:opacity-50"
+                            disabled={loading}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="bg-deep-navy p-6 rounded-lg text-cream-white text-center border border-burgundy">
+                <p className="text-lg mb-4">No event selected or event data missing.</p>
+                <p>Please select an active event from the dropdown above.</p>
+              </div>
+            )}
           </>
         )}
 
+        {/* Modal for adding new beverage */}
         <Modal isOpen={isModalOpen} onClose={() => {
           setIsModalOpen(false);
           setImagePreview(null);
@@ -379,6 +505,17 @@ export default function BeveragesPage() {
             </div>
           </form>
         </Modal>
+
+        {/* Restock Modal */}
+        {beverageToRestock && (
+          <RestockModal
+            isOpen={isRestockModalOpen}
+            onClose={() => setIsRestockModalOpen(false)}
+            beverage={beverageToRestock}
+            onConfirm={handleRestockConfirm}
+            isLoading={loading}
+          />
+        )}
       </div>
     </MainLayout>
   );

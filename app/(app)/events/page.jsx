@@ -1,7 +1,7 @@
 // app/(app)/events/page.jsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // Import useCallback
+import { useState, useEffect, useCallback } from 'react';
 import MainLayout from '../../../components/MainLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../lib/firebase';
@@ -59,19 +59,15 @@ export default function EventsPage() {
 
     setLoading(true);
     try {
-      const activeEvent = events.find(event => event.isActive);
-      if (activeEvent) {
-        const eventRef = doc(db, 'events', activeEvent.id);
-        await updateDoc(eventRef, { isActive: false });
-      }
-
+      // Removed the logic that deactivates other events.
+      // New events will simply be created as active.
       await addDoc(collection(db, 'events'), {
         name: newEventName,
         date: newEventDate,
         location: newEventLocation,
         budget: newEventBudget,
         currentSpend: 0,
-        isActive: true,
+        isActive: true, // This event will be active
         eventManagerId: user.uid,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -82,7 +78,7 @@ export default function EventsPage() {
       setNewEventDate('');
       setNewEventLocation('');
       setNewEventBudget(0);
-      fetchEvents();
+      fetchEvents(); // Refresh the list to show the new active event
     } catch (error) {
       console.error('Error creating event:', error);
       toast.error('Failed to create event.');
@@ -95,19 +91,31 @@ export default function EventsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const activeEvent = events.find(event => event.isActive && event.id !== eventId);
-      if (activeEvent) {
-        const activeEventRef = doc(db, 'events', activeEvent.id);
-        await updateDoc(activeEventRef, { isActive: false });
-      }
-
+      // Removed the logic that deactivates other events.
+      // Now, clicking "Set as Current Event" will only activate the selected event.
       const eventRef = doc(db, 'events', eventId);
       await updateDoc(eventRef, { isActive: true, updatedAt: Timestamp.now() });
-      toast.success('Event set as current!');
-      fetchEvents();
+      toast.success('Event set as active!'); // Changed message from 'current' to 'active'
+      fetchEvents(); // Refresh the list
     } catch (error) {
       console.error('Error setting active event:', error);
-      toast.error('Failed to set event as current.');
+      toast.error('Failed to set event as active.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeactivateEvent = async (eventId) => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const eventRef = doc(db, 'events', eventId);
+      await updateDoc(eventRef, { isActive: false, updatedAt: Timestamp.now() });
+      toast.success('Event deactivated successfully!');
+      fetchEvents(); // Refresh the list
+    } catch (error) {
+      console.error('Error deactivating event:', error);
+      toast.error('Failed to deactivate event.');
     } finally {
       setLoading(false);
     }
@@ -138,53 +146,56 @@ export default function EventsPage() {
           {events.length === 0 ? (
             <p className="text-cream-white col-span-full text-center">No events found. Create your first event!</p>
           ) : (
-            events.sort((a, b) => (b.isActive ? 1 : a.isActive ? -1 : 0) || b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime())
-                  .map((event) => (
-              <div
-                key={event.id}
-                className={`bg-deep-navy p-6 rounded-lg shadow-md border ${event.isActive ? 'border-secondary-gold ring-2 ring-secondary-gold' : 'border-dark-charcoal'} transform hover:scale-[1.02] transition-transform duration-200`}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <h2 className="text-xl font-semibold text-cream-white">
-                    {event.name}
-                  </h2>
-                  {event.isActive && (
-                    <span className="bg-primary-gold text-rich-black text-xs font-bold px-3 py-1 rounded-full">
-                      CURRENT
-                    </span>
+            events
+              .sort((a, b) => (b.isActive ? 1 : a.isActive ? -1 : 0) || b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime())
+              .map((event) => (
+                <div
+                  key={event.id}
+                  className={`bg-deep-navy p-6 rounded-lg shadow-md border ${event.isActive ? 'border-secondary-gold ring-2 ring-secondary-gold' : 'border-dark-charcoal'} transform hover:scale-[1.02] transition-transform duration-200`}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-xl font-semibold text-cream-white">
+                      {event.name}
+                    </h2>
+                    {event.isActive && (
+                      <span className="bg-primary-gold text-rich-black text-xs font-bold px-3 py-1 rounded-full">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-cream-white mb-1">
+                    <span className="font-semibold text-primary-gold">Date:</span> {new Date(event.date).toLocaleDateString()}
+                  </p>
+                  <p className="text-cream-white mb-1">
+                    <span className="font-semibold text-primary-gold">Location:</span> {event.location}
+                  </p>
+                  <p className="text-cream-white mb-1">
+                    <span className="font-semibold text-primary-gold">Budget:</span> R {event.budget.toLocaleString()}
+                  </p>
+                  <p className="text-cream-white mb-4">
+                    <span className="font-semibold text-primary-gold">Spend:</span> R {event.currentSpend.toLocaleString()}
+                  </p>
+                  
+                  {/* Action Buttons */}
+                  {event.isActive ? (
+                    <button
+                      onClick={() => handleDeactivateEvent(event.id)}
+                      className="w-full bg-burgundy hover:bg-red-700 text-cream-white font-bold py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50"
+                      disabled={loading}
+                    >
+                      Deactivate Event
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSetActiveEvent(event.id)}
+                      className="w-full bg-secondary-gold hover:bg-primary-gold text-rich-black font-bold py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50"
+                      disabled={loading}
+                    >
+                      Set as Active Event
+                    </button>
                   )}
                 </div>
-                <p className="text-cream-white mb-1">
-                  <span className="font-semibold text-primary-gold">Date:</span> {new Date(event.date).toLocaleDateString()}
-                </p>
-                <p className="text-cream-white mb-1">
-                  <span className="font-semibold text-primary-gold">Location:</span> {event.location}
-                </p>
-                <p className="text-cream-white mb-1">
-                  <span className="font-semibold text-primary-gold">Budget:</span> R {event.budget.toLocaleString()}
-                </p>
-                <p className="text-cream-white mb-4">
-                  <span className="font-semibold text-primary-gold">Spend:</span> R {event.currentSpend.toLocaleString()}
-                </p>
-                {!event.isActive && (
-                  <button
-                    onClick={() => handleSetActiveEvent(event.id)}
-                    className="w-full bg-secondary-gold hover:bg-primary-gold text-rich-black font-bold py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50"
-                    disabled={loading}
-                  >
-                    Set as Current Event
-                  </button>
-                )}
-                 {event.isActive && (
-                   <button
-                    className="w-full bg-primary-gold text-rich-black font-bold py-2 px-4 rounded opacity-70 cursor-not-allowed"
-                    disabled
-                   >
-                     Currently Active
-                   </button>
-                 )}
-              </div>
-            ))
+              ))
           )}
         </div>
 

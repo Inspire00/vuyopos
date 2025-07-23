@@ -68,7 +68,7 @@ export default function PastEventsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pastEvents.length === 0 ? (
             <p className="text-cream-white col-span-full text-center">
-              No past events found. Events become &quot;past&quot; when you set another event as current. {/* Fixed unescaped quotes */}
+              No past events found. Events become &quot;past&quot; when you Deactivate the event. {/* Fixed unescaped quotes */}
             </p>
           ) : (
             pastEvents.map((event) => (
