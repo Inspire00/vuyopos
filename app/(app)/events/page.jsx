@@ -12,7 +12,7 @@ import InvoiceModal from '../../../components/InvoiceModal'; // Import the new I
 import Link from 'next/link';
 
 export default function EventsPage() {
-    const { user } = useAuth();
+    const { user } = useAuth(); 
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false); // Renamed for clarity
