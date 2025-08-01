@@ -1,9 +1,8 @@
-// components/MainLayout.jsx
 'use client';
 
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import Chatbot from './Chatbot'; // Import the new Chatbot component
@@ -12,7 +11,8 @@ import Image from 'next/image'; // Import Image component for optimized images
 export default function MainLayout({ children }) {
   const { user, logout, loading } = useAuth();
   const router = useRouter();
-  
+  const pathname = usePathname();
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -23,6 +23,9 @@ export default function MainLayout({ children }) {
     }
   };
 
+  // Hide Chatbot on /current-pos and /tables pages
+  const showChatbot = !loading && user && !['/current-pos', '/tables'].includes(pathname);
+
   return (
     <div className="flex min-h-screen bg-rich-black">
       {/* Sidebar */}
@@ -30,12 +33,12 @@ export default function MainLayout({ children }) {
         <div>
           <div className="text-cream-white text-2xl font-bold mb-8 text-center flex items-center justify-center">
             <Image
-            src="/images/ic_launcher_round.png" // Ensure this path is correct relative to your public directory
+              src="/images/ic_launcher_round.png" // Ensure this path is correct relative to your public directory
               alt="Vuyo POS Logo"
               width={36} // Significantly reduced size
               height={36} // Significantly reduced size
               className="rounded-full mr-2 object-cover" // Make it rounded and add margin-right
-          />
+            />
             <span className="text-primary-gold">Vuyo</span> POS
           </div>
           <nav>
@@ -60,45 +63,36 @@ export default function MainLayout({ children }) {
                   <span className="mr-2">💰</span> Current Event POS
                 </Link>
               </li>
-
-              
               <li className="mb-4">
                 <Link href="/currenteventsdashboard" className="flex items-center text-cream-white hover:text-secondary-gold transition-colors duration-200">
                   <span className="mr-2">🎪</span> Live Dashboard
                 </Link>
               </li>
-
               <li className="mb-4">
                 <Link href="/past-events" className="flex items-center text-cream-white hover:text-secondary-gold transition-colors duration-200">
                   <span className="mr-2">📜</span> Past Events
                 </Link>
               </li>
-
               <li className="mb-4">
                 <Link href="/stats" className="flex items-center text-cream-white hover:text-secondary-gold transition-colors duration-200">
                   <span className="mr-2">🧮</span> Stats
                 </Link>
               </li>
-
-
-               <li className="mb-4">
+              <li className="mb-4">
                 <Link href="/suppliers" className="flex items-center text-cream-white hover:text-secondary-gold transition-colors duration-200">
                   <span className="mr-2">🛒</span> Suppliers
                 </Link>
               </li>
-
               <li className="mb-4">
                 <Link href="/staffing" className="flex items-center text-cream-white hover:text-secondary-gold transition-colors duration-200">
                   <span className="mr-2">👩🏼‍🤝‍🧑🏻</span> Find Staff
                 </Link>
               </li>
-
-
             </ul>
           </nav>
         </div>
 
-         {/* Chair Image Container - Fixed height */}
+        {/* Chair Image Container - Fixed height */}
         <div className="w-full flex-1 relative rounded-lg shadow-lg mt-5 mb-5 flex items-center justify-center overflow-hidden">
           <Image
             src="/images/Chair.png" // Ensure this path is correct relative to your public directory
@@ -139,8 +133,8 @@ export default function MainLayout({ children }) {
         </div>
       </main>
 
-      {/* Chatbot Component - only show if user is logged in */}
-      {!loading && user && <Chatbot />}
+      {/* Chatbot Component - only show if user is logged in and not on /current-pos or /tables */}
+      {showChatbot && <Chatbot />}
     </div>
   );
 }
